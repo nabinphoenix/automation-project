@@ -1,95 +1,115 @@
 """
-Notepad-Calculator Automation
-Properly switches between Notepad and Calculator
+This tool is for people who has many math problems in Notepad.
+It opens the Notepad file and reads all the math questions.
+Then it opens the Windows Calculator and solves every math problem one by one.
+Finally, it writes the answers back inside your Notepad file automatically.
 """
 
-import pyautogui as pag   # Controls mouse and keyboard
-import pyperclip        # Handles clipboard (copy/paste)
-import time             # For adding delays
-import os               # For file and system operations
-import re               # Regular Expressions for parsing text
-import pygetwindow as gw # For window management (focus/activate)
+import pyautogui as pag   # This library helps to move mouse and type on keyboard.
+import pyperclip        # This is used for copying and pasting text.
+import time             # This is used to make computer wait for some time.
+import os               # This is to check if your file is really there.
+import re               # This helps computer to find math in long text.
+import pygetwindow as gw # This helps to find and open the right app windows.
 
 
-# ===== CONFIGURATION =====
+# These are settings for how fast the computer works.
 pag.FAILSAFE = True
 pag.PAUSE = 0.8
+TYPING_INTERVAL = 0.05 
 
-# Typing speed
-TYPING_INTERVAL = 0.05
-
-# ===== FILE HANDLING =====
 
 def get_file_path():
-    """Ask user for file path"""
+    """ this function ask you where is your file. 
+    you type or paste the path and it check if file is real. 
+    """
     print("=" * 70)
     print("ENTER FILE PATH")
     print("=" * 70)
-    print("\n📁 How to get file path:")
-    print("   1. Right-click on your file")
-    print("   2. Select 'Copy as path'")
+    print("\nHow to get the path:")
+    print("   1. Right-click your file")
+    print("   2. Choose 'Copy as path'")
     print("   3. Paste it here")
-    print("\n   OR just type/paste the full path")
     print("=" * 70)
     
     file_path = input("\nEnter file path: ").strip().strip('"')
     
-    # Verify file exists
     if os.path.exists(file_path):
-        print(f"✅ File found: {file_path}")
+        print(f"File found: {file_path}")
         return file_path
     else:
-        print(f"❌ File not found: {file_path}")
-        print("   Please check the path and try again")
+        print(f"File not found. Please check the path and try again.")
         return None
 
-# ===== EXPRESSION EXTRACTION =====
 
 def extract_expressions(text):
-    """Extract mathematical expressions from text"""
+    """ this function find math questions in your text. 
+    it look for things like a. or 1. first. 
+    if there is no numbering it just look for lines that has many numbers and math signs. 
+    """
     expressions = []
     lines = text.split('\n')
     
+    print("\nSearching for math problems...")
+    fallback_counter = 1
+    
     for line in lines:
-        if not line.strip():
+        raw_line = line.strip()
+        if not raw_line:
             continue
-        
-        # This regex looks for a label at the start (e.g., 'a.', '1.', 'a)')
-        # It handles letters/numbers followed by a period or parenthesis
-        label_match = re.match(r'^([a-zA-Z0-9]+[.\)])\s*(.*)$', line)
+            
+        """
+        this look at line start 
+        if line start with a label like a. or 1) 
+        it keep that label and also keep the rest of the line after space
+        """
+        label_match = re.match(r'^([a-zA-Z0-9]+[.\)])\s*(.*)$', raw_line)
         
         if label_match:
-            label = label_match.group(1)  # e.g., "a." or "1."
-            rest_of_line = label_match.group(2)  # e.g., "1548-741"
+            label = label_match.group(1)
+            math_stuff = label_match.group(2)
+        else:
+            # if there is no numbering we check if the line look like math.
+            # it must have at least one number to be math.
+            if not any(c.isdigit() for c in raw_line):
+                continue
             
-            # Extract expression from the part AFTER the label
-            expression = ""
-            for char in rest_of_line:
-                if char.isdigit() or char in ['+', '-', '*', '/', '(', ')']:
-                    expression += char
+            # we check if most characters are numbers or math symbols.
+            math_chars = "0123456789+-*/()%. "
+            score = sum(1 for c in raw_line if c in math_chars)
             
-            if expression:
+            # if more than half of the line is math then we take it.
+            if score / len(raw_line) > 0.5:
+                label = f"{fallback_counter}."
+                math_stuff = raw_line
+                fallback_counter += 1
+            else:
+                continue
+            
+        # this part pick only the math symbols and numbers.
+        expression = ""
+        for char in math_stuff:
+            if char.isdigit() or char in ['+', '-', '*', '/', '(', ')', '.', ' ']:
+                expression += char
+        
+        final_expr = expression.strip()
+        if final_expr:
+            # check if it actually has numbers so we don't calculate empty stuff.
+            if any(c.isdigit() for c in final_expr):
                 expressions.append({
                     'label': label,
-                    'expression': expression,
-                    'original_line': line.strip()
+                    'expression': final_expr
                 })
-                print(f"  Extracted: {label} → {expression}")
+                print(f"  Found: {label} {final_expr}")
     
     return expressions
 
-# ===== WINDOW MANAGEMENT =====
 
 def focus_notepad():
+    """ this function find the notepad window. 
+    it make it active so we can copy things from it. 
     """
-    Focus on Notepad window using pygetwindow
-    Ensures it's the active window before copying/typing
-    """
-    print("  Switching to Notepad...")
-    
-    # Try to find Notepad window
-    # Exclude this script's editor if it happens to have 'Notepad' in title
-    notepad_wins = [w for w in gw.getWindowsWithTitle('Notepad') if 'new_main.py' not in w.title]
+    notepad_wins = [w for w in gw.getWindowsWithTitle('Notepad') if 'main.py' not in w.title]
     
     if notepad_wins:
         win = notepad_wins[0]
@@ -98,25 +118,20 @@ def focus_notepad():
                 win.restore()
             win.activate()
             time.sleep(1)
-            print("  ✓ Notepad focused")
             return True
-        except Exception as e:
-            print(f"  ⚠️ Could not activate Notepad: {e}")
-    else:
-        print("  ❌ Notepad window not found!")
+        except:
+            pass
     
-    # Fallback to Alt+Tab if pygetwindow fails
+    # if it fail it try to alt-tab to find it.
     pag.hotkey('alt', 'tab')
     time.sleep(1)
     return False
 
+
 def focus_calculator():
+    """ this function find and open calculator window. 
+    this works so we can type math in it later. 
     """
-    Focus on Calculator window using pygetwindow
-    Ensures Calculator is the active window before typing
-    """
-    print("  Switching to Calculator...")
-    
     calc_wins = gw.getWindowsWithTitle('Calculator')
     
     if calc_wins:
@@ -126,71 +141,48 @@ def focus_calculator():
                 win.restore()
             win.activate()
             time.sleep(1)
-            print("  ✓ Calculator focused")
             return True
-        except Exception as e:
-            print(f"  ⚠️ Could not activate Calculator: {e}")
-    else:
-        print("  ❌ Calculator window not found!")
-        # Try to open it if not found
-        open_calculator()
-    
+        except:
+            pass
     return False
 
 
-# ===== AUTOMATION FUNCTIONS =====
-
 def open_file_in_notepad(file_path):
-    """Open file in Notepad"""
-    print(f"\n📝 Opening file in Notepad...")
-    
-    # Use Win+R to run command
+    """ this function open your file using windows run command. 
+    it just type notepad and file name to open it fast. 
+    """
+    print(f"\nOpening your file in Notepad...")
     pag.hotkey('win', 'r')
     time.sleep(1)
     
-    # Type command
     command = f'notepad "{file_path}"'
-    pag.write(command, interval=0.02)
+    pag.write(command, interval=0.01)
     time.sleep(0.5)
-    
     pag.press('enter')
     time.sleep(3)
-    
-    print("✓ Notepad opened")
+
 
 def copy_from_notepad():
-    """Copy content from Notepad"""
-    print("\n📋 Copying content from Notepad...")
-    
-    # Make sure Notepad is focused
+    """ this function select all text and copy it. 
+    it work like pressing ctrl+a then ctrl+c on keyboard. 
+    """
     focus_notepad()
-    
-    # Clear clipboard before copying
-    pyperclip.copy("")
+    pyperclip.copy("") 
     time.sleep(0.5)
     
-    # Select all text (Ctrl+A)
     pag.hotkey('ctrl', 'a')
-    time.sleep(1)
-    
-    # Copy selected text (Ctrl+C)
+    time.sleep(0.5)
     pag.hotkey('ctrl', 'c')
     time.sleep(1)
     
-    # Get the raw text from the windows clipboard
-    content = pyperclip.paste()
-    
-    if content:
-        print(f"✓ Copied {len(content)} characters")
-        return content
-    else:
-        print("❌ Failed to copy content")
-        return ""
+    return pyperclip.paste()
+
 
 def open_calculator():
-    """Open Calculator"""
-    print("\n🧮 Opening Calculator...")
-    
+    """ this function open calculator app. 
+    it also switch it to scientific mode so hard problems are correct. 
+    """
+    print("\nOpening Calculator...")
     pag.press('win')
     time.sleep(0.5)
     pag.write('calculator', interval=0.05)
@@ -198,241 +190,137 @@ def open_calculator():
     pag.press('enter')
     time.sleep(4)
     
-    print("✓ Calculator opened")
-    
-    # Ensure Scientific Mode for complex calculations (BODMAS/PEMDAS)
-    print("  Ensuring Scientific Mode...")
     focus_calculator()
+    # alt+2 is the shortcut for scientific mode.
     pag.hotkey('alt', '2')
     time.sleep(1)
 
+
 def calculate_expression(expression):
+    """ this function type math in calculator and get result. 
+    it clear calculator first so old math does not mix up. 
     """
-    Calculate expression in Calculator
-    FIXED: Properly focuses Calculator before typing
-    """
-    print(f"  🔢 Calculating: {expression}")
+    # we remove spaces so calculator does not get confused.
+    calc_input = expression.replace(" ", "")
     
-    # IMPORTANT: Focus Calculator first!
     focus_calculator()
-    
-    # Clear calculator
-    pag.press('esc')
+    pag.press('esc') # clear button
     time.sleep(0.5)
     
-    # Type the math expression into the Calculator display
-    # We use write() because it handles numeric symbols and operators reliably
-    pag.write(expression, interval=0.1)
-    time.sleep(1)
-    
-    # Press ENTER to execute the calculation
+    pag.write(calc_input, interval=0.05)
+    time.sleep(0.8)
     pag.press('enter')
-    time.sleep(2)
-    
-    # Clear the clipboard first to ensure we don't accidentally get old data
-    pyperclip.copy("")
-    time.sleep(0.5)
-    
-    # Send Ctrl+C to the Calculator to copy the final result
-    pag.hotkey('ctrl', 'c')
     time.sleep(1.5)
     
-    # Pull the result from the clipboard into our Python variable
-    result = pyperclip.paste().strip()
-    
-    # Clean result: remove commas and whitespace
-    result = result.replace(",", "").strip()
-    
-    # Validate result: it shouldn't be the same as the expression and shouldn't contain letters
-    if result and result != "" and not any(c.isalpha() for c in result):
-        # Additional check: if result is still the expression, copying might have failed
-        if result == expression:
-            print("  ⚠️ Result matches expression, retrying...")
-            return retry_calculate_copy()
-        
-        print(f"  ✅ Result: {result}")
-        return result
-    else:
-        return retry_calculate_copy()
-
-def retry_calculate_copy():
-    """Fallback if first copy fails"""
-    print("  Retrying copy...")
-    focus_calculator()
+    pyperclip.copy("")
     time.sleep(0.5)
-    # Sometimes Esc or a small click helps refresh the UI state
-    pag.press('enter') 
-    time.sleep(1)
     pag.hotkey('ctrl', 'c')
     time.sleep(1)
+    
     result = pyperclip.paste().strip().replace(",", "")
-    print(f"  ✅ Result: {result}")
+    
+    # if result is empty we try one more time to be sure.
+    if not result or result == calc_input or any(c.isalpha() for c in result):
+        focus_calculator()
+        time.sleep(0.5)
+        pag.press('enter') 
+        time.sleep(0.8)
+        pag.hotkey('ctrl', 'c')
+        time.sleep(0.8)
+        result = pyperclip.paste().strip().replace(",", "")
+    
     return result
 
+
 def append_results_to_notepad(results):
+    """ this function write all answers at bottom of file. 
+    it move cursor to end and then type everything. 
     """
-    Append results to Notepad
-    FIXED: Properly focuses Notepad before typing
-    """
-    print("\n📝 Appending results to Notepad...")
-    
-    # Switch to Notepad
+    print("\nWriting results to Notepad...")
     focus_notepad()
     
-    # Go to end
     pag.hotkey('ctrl', 'end')
     time.sleep(1)
     
-    # Add separator
-    pag.press('enter')
-    time.sleep(0.3)
-    pag.press('enter')
-    time.sleep(0.3)
-    
+    pag.press('enter', presses=2)
     separator = "=" * 50
-    pag.write(separator, interval=TYPING_INTERVAL)
-    time.sleep(0.5)
+    pag.write(separator, interval=0.01)
     pag.press('enter')
-    time.sleep(0.3)
-    
-    pag.write("RESULTS:", interval=TYPING_INTERVAL)
-    time.sleep(0.5)
+    pag.write("RESULTS:", interval=0.01)
     pag.press('enter')
-    time.sleep(0.3)
-    
-    pag.write(separator, interval=TYPING_INTERVAL)
-    time.sleep(0.5)
+    pag.write(separator, interval=0.01)
     pag.press('enter')
-    time.sleep(0.3)
     
-    # Add each result
     for item in results:
-        result_line = f"{item['label']} {item['expression']} = {item['result']}"
-        print(f"  Writing: {result_line}")
-        
-        pag.write(result_line, interval=TYPING_INTERVAL)
-        time.sleep(0.5)
+        line = f"{item['label']} {item['expression']} = {item['result']}"
+        print(f"  Writing result for {item['label']}")
+        pag.write(line, interval=0.02)
         pag.press('enter')
-        time.sleep(0.5)
-    
-    print("✓ Results appended")
+        time.sleep(0.2)
+
 
 def save_notepad():
-    """Save Notepad file"""
-    print("\n💾 Saving file...")
-    
-    # Make sure Notepad is focused
+    """ this function save your file. 
+    it just press ctrl+s like you do manually. 
+    """
     focus_notepad()
-    
     pag.hotkey('ctrl', 's')
-    time.sleep(2)
-    
-    print("✓ File saved")
+    time.sleep(1)
 
-# ===== MAIN AUTOMATION =====
 
 def main():
-    """Main automation workflow"""
-    
+    """ this function is the main logic. 
+    it call other functions in right order to solve math. 
+    """
     print("\n" + "=" * 70)
-    print("NOTEPAD-CALCULATOR AUTOMATION")
-    print("=" * 70)
-    print("\n📋 What this does:")
-    print("   1. Opens your file in Notepad")
-    print("   2. Reads math questions (a., b., c., etc.)")
-    print("   3. Solves them in Calculator")
-    print("   4. Appends results to the file")
-    print("\n⚠️  EMERGENCY STOP: Move mouse to ANY corner of the screen")
+    print("NOTEPAD-CALCULATOR AUTO-SOLVER")
     print("=" * 70)
     
     try:
-        # Step 1: Get file path from user
-        file_path = get_file_path()
-        
-        if not file_path:
-            print("\n❌ Invalid file path. Exiting.")
+        path = get_file_path()
+        if not path:
             return
         
+        print("Emergency Stop: Move mouse to top-left corner anytime to stop.")
         
-        print("\n✅ File verified!")
-        input("\nPress ENTER to start automation...")
+        input("\nPress ENTER to start... Then hands off the mouse!")
         
-        # Step 2: Open in Notepad
-        open_file_in_notepad(file_path)
+        open_file_in_notepad(path)
+        time.sleep(1.5)
         
-        print("\n⏳ Starting in 2 seconds... Don't touch anything!")
-        time.sleep(2)
-        
-        # Step 3: Copy content from Notepad
         content = copy_from_notepad()
-        
         if not content:
-            print("❌ No content found. Exiting.")
+            print("The file was empty. Stopping.")
             return
         
-        # Step 4: Extract expressions
-        print("\n🔍 Extracting expressions...")
-        expressions = extract_expressions(content)
-        
-        if not expressions:
-            print("❌ No expressions found!")
+        problems = extract_expressions(content)
+        if not problems:
+            print("No math problems found. Check your file.")
             return
         
-        print(f"\n✅ Found {len(expressions)} expressions")
-        
-        # Step 5: Open Calculator
         open_calculator()
-        time.sleep(2)
         
-        # Step 6: Calculate each expression
-        print("\n🧮 Calculating expressions...")
-        results = []
+        final_list = []
+        for i, p in enumerate(problems, 1):
+            print(f"Solving {i} of {len(problems)}: {p['label']}")
+            ans = calculate_expression(p['expression'])
+            final_list.append({
+                'label': p['label'],
+                'expression': p['expression'],
+                'result': ans if ans else "ERROR"
+            })
         
-        for i, expr_data in enumerate(expressions, 1):
-            print(f"\n[{i}/{len(expressions)}] {expr_data['label']}")
-            
-            try:
-                # This will focus Calculator and calculate
-                result = calculate_expression(expr_data['expression'])
-                results.append({
-                    'label': expr_data['label'],
-                    'expression': expr_data['expression'],
-                    'result': result
-                })
-            except Exception as e:
-                print(f"  ❌ Error: {e}")
-                results.append({
-                    'label': expr_data['label'],
-                    'expression': expr_data['expression'],
-                    'result': 'ERROR'
-                })
-            
-            time.sleep(1)
-        
-        # Step 7: Append results to Notepad
-        append_results_to_notepad(results)
-        
-        # Step 8: Save
+        append_results_to_notepad(final_list)
         save_notepad()
         
-        # Summary
-        print("\n" + "=" * 70)
-        print("✅ AUTOMATION COMPLETED!")
-        print("=" * 70)
-        print("\n📊 Results:")
-        for item in results:
-            print(f"   {item['label']} {item['expression']} = {item['result']}")
-        print("\n💾 Results saved to:", file_path)
-        print("=" * 70)
+        print("\nAll done! Your answers are saved in the file.")
         
     except pag.FailSafeException:
-        print("\n⚠️  EMERGENCY STOP ACTIVATED!")
-    except KeyboardInterrupt:
-        print("\n⚠️  Interrupted by user (Ctrl+C)")
+        print("\n!!! EMERGENCY STOP !!!")
+        print("Stopped because you moved the mouse to the corner.")
     except Exception as e:
-        print(f"\n❌ ERROR: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"\nThere was an error: {e}")
+
 
 if __name__ == "__main__":
     main()
