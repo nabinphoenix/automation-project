@@ -173,5 +173,3 @@ This project shows how to:
 This tool is more than just a math solver. It shows how a computer can be programmed to do repetitive tasks for you by using different apps at the same time.
 
 ---
-
-*Created for Treeleaf AI Company*
